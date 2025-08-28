@@ -25,6 +25,10 @@ Tags: flexible-header, custom-colors, custom-menu, custom-logo, editor-style, fe
  * Custom styles specific to this child theme
  */
 
+ .single-sfwd-lessons .ld-progress {
+    display: none !important;
+}
+
 /* Course list layout - Specific targeting for course content */
 body:not(.course-id-4236) .ld-lesson-list {
     max-width: 1200px;

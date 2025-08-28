@@ -1240,6 +1240,20 @@ function hello_elementor_child_scripts_styles() {
 }
 add_action('wp_enqueue_scripts', 'hello_elementor_child_scripts_styles', 20);
 
+// Enqueue dashboard behavior script
+add_action('wp_enqueue_scripts', 'enqueue_dashboard_behavior_script', 99);
+function enqueue_dashboard_behavior_script() {
+    if (is_user_logged_in()) {
+        wp_enqueue_script(
+            'dashboard-behavior',
+            get_stylesheet_directory_uri() . '/assets/js/dashboard-behavior.js',
+            array('jquery'),
+            filemtime(get_stylesheet_directory() . '/assets/js/dashboard-behavior.js'),
+            true
+        );
+    }
+}
+
 /**
  * Enqueue progress bar styles
  */

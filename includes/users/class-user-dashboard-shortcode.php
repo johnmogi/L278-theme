@@ -17,18 +17,18 @@ class User_Dashboard_Shortcode {
      * @var array
      */
     private $defaults = array(
-        'is_course' => '', // Course ID to apply specific settings
+        'is_course' => '4236', // Course ID to apply specific settings
         'vehicle_type' => 'default', // Options: default, private, truck, motorcycle
         'show_practice' => 'true',
         'show_real_test' => 'true',
-        'show_teacher_quizzes' => 'true',
+        'show_teacher_quizzes' => 'false',
         'show_study_materials' => 'true',
         'show_topic_tests' => 'true',
-        'show_stats' => 'true',
+        'show_stats' => 'false',
         'practice_url' => '#',
-        'real_test_url' => '#',
-        'study_materials_url' => '#',
-        'topic_tests_url' => '#',
+        'real_test_url' => '/quizzes/מבחן-אמת-כמו-בתאוריה/',
+        'study_materials_url' => '/חומרי-לימוד-לפי-נושאים/',
+        'topic_tests_url' => '/מבחנים-לפי-נושאים-3/',
         'account_url' => '#',
         'stats_url' => '#',
         'welcome_text' => 'שלום, %s!', // %s will be replaced with user's name
@@ -282,6 +282,9 @@ class User_Dashboard_Shortcode {
                 if ($atts['topic_tests_url'] === $this->defaults['topic_tests_url']) {
                     $atts['topic_tests_url'] = 'מבחנים-לפי-נושאים-3/';
                 }
+                if ($atts['real_test_url'] === $this->defaults['real_test_url']) {
+                    $atts['real_test_url'] = 'quizzes/מבחן-אמת-כמו-בתאוריה/';
+                }
                 if ($atts['show_stats'] === $this->defaults['show_stats']) {
                     $atts['show_stats'] = 'false';
                 }
@@ -482,16 +485,56 @@ class User_Dashboard_Shortcode {
      * @return string HTML output
      */
     private function render_course_access_status($access_info) {
-        if (empty($access_info['active_courses']) && empty($access_info['expired_courses'])) {
+        if (!is_user_logged_in()) {
             return '';
+        }
+        
+        // Debug: Always show the section to check if data is being retrieved
+        // if (empty($access_info['active_courses']) && empty($access_info['expired_courses'])) {
+        //     return '';
+        // }
+
+        // Check if we're currently viewing a course page
+        $current_url = (is_ssl() ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+        $is_on_course_page = false;
+        
+        // Get first active course for comparison
+        $quick_course = null;
+        if (!empty($access_info['active_courses'])) {
+            $quick_course = $access_info['active_courses'][0];
+        } else {
+            // Fallback to enrolled courses
+            $user_courses = learndash_user_get_enrolled_courses(get_current_user_id());
+            if (!empty($user_courses)) {
+                foreach ($user_courses as $course_id) {
+                    if (sfwd_lms_has_access($course_id, get_current_user_id())) {
+                        $course = get_post($course_id);
+                        if ($course) {
+                            $quick_course = array(
+                                'title' => $course->post_title,
+                                'url' => get_permalink($course_id),
+                                'id' => $course_id
+                            );
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Check if current page is the course page
+        if ($quick_course && isset($quick_course['id'])) {
+            global $post;
+            $is_on_course_page = ($post && $post->ID == $quick_course['id']);
         }
 
         ob_start();
         ?>
-        <div class="course-access-section">
-            <div class="column-header">
-                <h3>מצב גישה לקורסים</h3>
-            </div>
+        <div class="course-access-details">
+            <h4>מצב גישה לקורסים</h4>
+            
+            <!-- Course access details -->
+            
             
             <?php if (!empty($access_info['expiring_soon'])) : ?>
                 <div class="access-notice expiring-notice">
@@ -579,13 +622,49 @@ class User_Dashboard_Shortcode {
                             <div class="course-expiry-item active">
                                 <strong><?php echo esc_html($course['title']); ?></strong>
                                 <span class="expiry-text">תוקף עד <?php echo esc_html($course['expires_formatted']); ?></span>
-                                <a href="<?php echo esc_url($course['url']); ?>" class="continue-button">צפה בקורס</a>
+                                <a href="<?php echo esc_url($course['url']); ?>" class="continue-button">המשך ללמוד</a>
                             </div>
                         <?php endif; ?>
                     <?php endforeach; ?>
                 </div>
+            <?php else : ?>
+                <!-- Fallback: Check for enrolled courses without expiration data -->
+                <?php 
+                $user_courses = learndash_user_get_enrolled_courses(get_current_user_id());
+                if (!empty($user_courses)) : ?>
+                    <div class="access-notice active-notice">
+                        <h4>✅ גישה פעילה</h4>
+                        <?php foreach ($user_courses as $course_id) : 
+                            if (sfwd_lms_has_access($course_id, get_current_user_id())) :
+                                $course = get_post($course_id);
+                                if ($course) : ?>
+                                    <div class="course-expiry-item active">
+                                        <strong><?php echo esc_html($course->post_title); ?></strong>
+                                        <span class="expiry-text">גישה פעילה</span>
+                                        <a href="<?php echo esc_url(get_permalink($course_id)); ?>" class="continue-button">המשך ללמוד</a>
+                                    </div>
+                                <?php endif;
+                            endif;
+                        endforeach; ?>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
+        
+        <style>
+        .course-access-details {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .course-access-details h4 {
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+        </style>
         <?php
         return ob_get_clean();
     }
@@ -622,109 +701,83 @@ class User_Dashboard_Shortcode {
         // Get course access information
         $access_info = $this->get_user_course_access();
 
+        // Check if we're on a single course page
+        $is_single_course_page = is_singular('sfwd-courses');
+        
         ob_start();
         ?>
         <div class="user-dashboard-container">
-            <!-- Course Access Status - Full Width Section -->
-            <?php echo $this->render_course_access_status($access_info); ?>
+            <!-- Course Access Status Section - Full Width at Top -->
+            <div class="course-access-status-wrapper">
+                <?php echo $this->render_course_access_status($access_info); ?>
+            </div>
             
-            <div class="dashboard-content">
-                <!-- Left Column - User Panel -->
-                <div class="dashboard-column user-panel">
-                    <div class="user-greeting">
-                        <h2><?php echo esc_html($welcome_text); ?></h2>
-                        <div class="user-meta">
-                            <div class="meta-item date">
-                                <span class="meta-icon">📅</span>
-                                <span class="meta-text"><?php echo esc_html($this->get_current_date()); ?></span>
-                            </div>
-                            <div class="meta-item track">
-                                <span class="meta-icon">🎯</span>
-                                <a href="<?php echo esc_url($primary_course_info['url']); ?>" class="meta-text course-link"><?php echo esc_html($atts['track_name']); ?></a>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Active Course Section -->
-                    <div class="course-subject-section">
-                        <div class="course-subject-header">
-                            <h4>נושא לימוד</h4>
-                        </div>
-                        <div class="course-subject-content">
-                            <?php
-                            // Get user's active course with access check
-                            $user_courses = learndash_user_get_enrolled_courses(get_current_user_id());
-                            $has_active_course = false;
-                            
-                            if (!empty($user_courses)) {
-                                foreach ($user_courses as $course_id) {
-                                    // Check if user has active access using expiration system
-                                    $expires = get_user_meta(get_current_user_id(), "course_{$course_id}_access_expires", true);
-                                    $has_access = ($expires == 0 || $expires > current_time('timestamp'));
-                                    
-                                    if ($has_access && sfwd_lms_has_access($course_id, get_current_user_id())) {
-                                        $course_title = get_the_title($course_id);
-                                        $course_url = get_permalink($course_id);
-                                        $has_active_course = true;
-                                        ?>
-                                        <div class="active-course-info">
-                                            <a href="<?php echo esc_url($course_url); ?>" class="course-title-link">
-                                                <div class="course-title-strong"><?php echo esc_html($course_title); ?></div>
-                                            </a>
-                                        </div>
-                                        <?php
-                                        break; // Show only first active course
-                                    }
-                                }
-                            }
-                            
-                            if (!$has_active_course) { ?>
-                                <p class="no-course-message">אין קורס פעיל כרגע</p>
-                            <?php } ?>
-                        </div>
-                    </div>
-                    <div class="user-actions">
-                        <?php if (current_user_can('administrator')) : ?>
-                        <a href="<?php echo esc_url($atts['account_url']); ?>" class="user-action-link edit-account">
-                            <span class="link-icon">✏️</span>
-                            <span class="link-text">ערוך חשבון (<?php echo esc_html($vehicle_text); ?>)</span>
-                        </a>
-                        <?php endif; ?>
-                        <?php if ($atts['show_stats'] === 'true') : ?>
-                            <?php 
-                            // Check if current user is a teacher
-                            $current_user = wp_get_current_user();
-                            $is_teacher = false;
-                            $teacher_roles = array('administrator', 'school_teacher', 'wdm_instructor', 'instructor', 'wdm_swd_instructor', 'swd_instructor');
-                            
-                            foreach ($teacher_roles as $role) {
-                                if (in_array($role, $current_user->roles)) {
-                                    $is_teacher = true;
-                                    break;
-                                }
-                            }
-                            
-                            if ($is_teacher) {
-                                // Teacher - redirect to teacher dashboard with their ID
-                                $stats_url = 'https://test-li.ussl.co.il/teacher_dashboard/?teacher_id=' . $current_user->ID;
-                            } else {
-                                // Student - scroll to quiz progress details on same page
-                                $stats_url = '#quiz_progress_details';
-                            }
-                            ?>
-                        <a href="<?php echo esc_url($stats_url); ?>" class="user-action-link stats" <?php echo !$is_teacher ? 'onclick="document.getElementById(\"quiz_progress_details\").style.display=\"block\"; document.getElementById(\"quiz_progress_details\").scrollIntoView({behavior: \"smooth\"}); return false;"' : ''; ?>>
-                            <span class="link-icon">📊</span>
-                            <span class="link-text">סטטיסטיקות לימוד</span>
-                        </a>
-                        <?php endif; ?>
-                        <?php if ($atts['show_logout'] === 'true') : ?>
-                        <a href="<?php echo esc_url(wp_logout_url(home_url())); ?>" class="user-action-link logout">
-                            <span class="link-icon">🚪</span>
-                            <span class="link-text">התנתק</span>
-                        </a>
-                        <?php endif; ?>
-                    </div>
+            <!-- Collapsible Dashboard Section -->
+            <div class="dashboard-main-section">
+                <!-- Collapsible header -->
+                <div class="column-header" style="cursor: pointer;">
+                    <h3>לוח בקרה</h3>
+                    <span class="collapse-indicator" id="dashboard-indicator">▼</span>
                 </div>
+                
+                <!-- Dashboard content (collapsible) -->
+                <div class="dashboard-content" id="dashboard-content">
+                    <!-- 3-Column Dashboard Layout -->
+                    <div class="dashboard-columns">
+                        <!-- Left Column - User Panel -->
+                        <div class="dashboard-column user-panel">
+                            <div class="user-greeting">
+                                <h2><?php echo esc_html($welcome_text); ?></h2>
+                                <div class="user-meta">
+                                    <div class="meta-item date">
+                                        <span class="meta-icon">📅</span>
+                                        <span class="meta-text"><?php echo esc_html($this->get_current_date()); ?></span>
+                                    </div>
+                                    <div class="meta-item track">
+                                        <span class="meta-icon">🎯</span>
+                                        <a href="<?php echo esc_url($primary_course_info['url']); ?>" class="meta-text course-link"><?php echo esc_html($atts['track_name']); ?></a>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="user-actions">
+                                <?php if (current_user_can('administrator')) : ?>
+                                <a href="<?php echo esc_url($atts['account_url']); ?>" class="user-action-link edit-account">
+                                    <span class="link-icon">✏️</span>
+                                    <span class="link-text">ערוך חשבון (<?php echo esc_html($vehicle_text); ?>)</span>
+                                </a>
+                                <?php endif; ?>
+                                <?php if ($atts['show_stats'] === 'true') : ?>
+                                    <?php 
+                                    // Check if current user is a teacher
+                                    $current_user = wp_get_current_user();
+                                    $is_teacher = false;
+                                    $teacher_roles = array('administrator', 'school_teacher', 'wdm_instructor', 'instructor', 'wdm_swd_instructor', 'swd_instructor');
+                                    
+                                    foreach ($teacher_roles as $role) {
+                                        if (in_array($role, $current_user->roles)) {
+                                            $is_teacher = true;
+                                            break;
+                                        }
+                                    }
+                                    
+                                    if ($is_teacher) {
+                                        // Teacher - redirect to teacher dashboard with their ID
+                                        $stats_url = 'https://test-li.ussl.co.il/teacher_dashboard/?teacher_id=' . $current_user->ID;
+                                    } else {
+                                        // Student - scroll to quiz progress details on same page
+                                        $stats_url = '#quiz_progress_details';
+                                    }
+                                    ?>
+                                <?php endif; ?>
+                                <?php if ($atts['show_logout'] === 'true') : ?>
+                                <a href="<?php echo esc_url(wp_logout_url(home_url())); ?>" class="user-action-link logout">
+                                    <span class="link-icon">🚪</span>
+                                    <span class="link-text">התנתק</span>
+                                </a>
+                                <?php endif; ?>
+                            </div>
+                        </div>
 
                 <!-- Middle Column - Practice Tests -->
                 <?php if ($atts['show_practice'] === 'true' || $atts['show_real_test'] === 'true' || $atts['show_teacher_quizzes'] === 'true') : ?>
@@ -779,13 +832,13 @@ class User_Dashboard_Shortcode {
                     </div>
                     <div class="button-group">
                         <?php if ($atts['show_study_materials'] === 'true') : ?>
-                        <a href="<?php echo esc_url($atts['study_materials_url']); ?>" class="dashboard-button study-materials-button">
+                        <a href="<?php echo esc_url(home_url($atts['study_materials_url'])); ?>" class="dashboard-button study-materials-button">
                             <span class="button-text">חומר לימוד לפי נושאים</span>
                             <span class="button-icon">📚</span>
                         </a>
                         <?php endif; ?>
                         <?php if ($atts['show_topic_tests'] === 'true') : ?>
-                        <a href="<?php echo esc_url($atts['topic_tests_url']); ?>" class="dashboard-button topic-tests-button">
+                        <a href="<?php echo esc_url(home_url($atts['topic_tests_url'])); ?>" class="dashboard-button topic-tests-button">
                             <span class="button-text">מבחנים לפי נושאים</span>
                             <span class="button-icon">📝</span>
                         </a>
@@ -793,12 +846,16 @@ class User_Dashboard_Shortcode {
                     </div>
                 </div>
                 <?php endif; ?>
-            </div>
+                    </div> <!-- End dashboard-columns -->
+                </div> <!-- End dashboard-content -->
+            </div> <!-- End dashboard-main-section -->
 
-            <!-- Footer -->
+            <!-- Footer (only show when not on LearnDash pages) -->
+            <?php if (!is_singular('sfwd-courses') && !is_singular('sfwd-lessons') && !is_singular('sfwd-topic') && !is_singular('sfwd-quiz')) : ?>
             <div class="dashboard-footer">
                 <p>בהצלחה בלימוד ובתרגול!</p>
             </div>
+            <?php endif; ?>
         </div>
         
         <style>
@@ -944,6 +1001,365 @@ class User_Dashboard_Shortcode {
         }
         </style>
         
+        <script>
+        function toggleDashboard() {
+            const content = document.getElementById('dashboard-content');
+            const indicator = document.getElementById('dashboard-indicator');
+            
+            if (content.style.display === 'none') {
+                // Expand
+                content.style.display = 'block';
+                indicator.textContent = '▼';
+            } else {
+                // Collapse
+                content.style.display = 'none';
+                indicator.textContent = '▶';
+            }
+        }
+        </script>
+        
+        <style>
+        /* AGGRESSIVE Course Access Status - Full Width at Top */
+        .user-dashboard-container {
+            width: 100% !important;
+            max-width: none !important;
+            display: block !important;
+        }
+        
+        .course-access-status-wrapper {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 0 20px 0 !important;
+            padding: 0 !important;
+            background: #f8f9fa !important;
+            border-radius: 8px !important;
+            border: 1px solid #dee2e6 !important;
+            display: block !important;
+            clear: both !important;
+            float: none !important;
+            box-sizing: border-box !important;
+        }
+        
+        .course-access-status-wrapper .course-access-details {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 15px !important;
+            background: transparent !important;
+            border: none !important;
+            border-radius: 0 !important;
+            display: block !important;
+            box-sizing: border-box !important;
+        }
+        
+        .course-access-status-wrapper .course-access-details h4 {
+            margin: 0 0 15px 0 !important;
+            color: #333 !important;
+            font-size: 18px !important;
+            font-weight: bold !important;
+        }
+        
+        .dashboard-main-section {
+            width: 100% !important;
+            margin-top: 0 !important;
+            clear: both !important;
+            display: block !important;
+        }
+        
+        .dashboard-main-section .column-header {
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            margin: 0 !important;
+            padding: 10px !important;
+            background: #f8f9fa !important;
+            border-radius: 5px 5px 0 0 !important;
+            border: 1px solid #dee2e6 !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        
+        .dashboard-main-section .column-header:hover {
+            background: #e9ecef;
+        }
+        
+        .collapse-indicator {
+            font-size: 14px;
+            font-weight: bold;
+            transition: transform 0.2s ease;
+        }
+        
+        .dashboard-content {
+            display: initial !important;
+            border: 1px solid #dee2e6 !important;
+            border-top: none !important;
+            border-radius: 0 0 5px 5px !important;
+            padding: 15px !important;
+            background: white !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+            display: block !important;
+        }
+        
+        /* Override Elementor grid display that breaks layout */
+        .user-dashboard-container .dashboard-content {
+            display: block !important;
+        }
+        
+        .dashboard-columns {
+            display: flex;
+            gap: 20px;
+            margin-top: 0;
+            width: 100%;
+            flex-wrap: nowrap;
+        }
+        
+        .dashboard-column {
+            flex: 1;
+            min-width: 0;
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #dee2e6;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .dashboard-column .column-header {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #ddd;
+        }
+        
+        .dashboard-column .column-header h3 {
+            margin: 0;
+            color: #333;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .dashboard-button {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            background: #f8f9fa;
+            color: #333;
+            text-decoration: none;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+            transition: all 0.2s ease;
+        }
+        
+        .dashboard-button:hover {
+            background: #e9ecef;
+            color: #333;
+            text-decoration: none;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .user-panel {
+            background: #f8f9fa;
+        }
+        
+        .user-greeting h2 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 18px;
+        }
+        
+        .user-meta {
+            margin-bottom: 20px;
+        }
+        
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .meta-icon {
+            font-size: 16px;
+        }
+        
+        .meta-text {
+            color: #666;
+            text-decoration: none;
+        }
+        
+        .course-link:hover {
+            color: #6c757d;
+        }
+        
+        .user-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .user-action-link {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #f8f9fa;
+            color: #333;
+            text-decoration: none;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+        
+        .user-action-link:hover {
+            background: #e9ecef;
+            color: #333;
+            text-decoration: none;
+            transform: translateY(-1px);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .quick-access-buttons {
+            margin: 0 0 15px 0;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .quick-course-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.2s ease;
+        }
+        
+        .quick-course-button:hover {
+            background: #218838;
+            color: white;
+            text-decoration: none;
+        }
+        
+        /* AGGRESSIVE 3-column layout */
+        .dashboard-columns {
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 20px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            flex-wrap: nowrap !important;
+            justify-content: space-between !important;
+            align-items: stretch !important;
+            box-sizing: border-box !important;
+        }
+        
+        .dashboard-column {
+            flex: 1 1 33.333% !important;
+            min-width: 280px !important;
+            max-width: 33.333% !important;
+            background: #ffffff !important;
+            border-radius: 8px !important;
+            padding: 20px !important;
+            border: 1px solid #dee2e6 !important;
+            word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            box-sizing: border-box !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+            margin: 0 !important;
+            float: none !important;
+            position: relative !important;
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            .dashboard-column {
+                min-width: 220px !important;
+            }
+        }
+        
+        @media (max-width: 900px) {
+            .dashboard-columns {
+                flex-direction: column !important;
+                gap: 15px !important;
+            }
+            
+            .dashboard-column {
+                max-width: 100% !important;
+                min-width: auto !important;
+                flex: 1 1 100% !important;
+            }
+            
+            .course-access-status-wrapper {
+                margin-bottom: 15px !important;
+            }
+        }
+        
+        /* Override any theme styles that might interfere */
+        .user-dashboard-container * {
+            box-sizing: border-box !important;
+        }
+        
+        /* Override Elementor LearnDash lesson interference */
+        .learndash-wrapper .ld-item-list .ld-item-list-item a.ld-item-name {
+            color: inherit !important;
+        }
+        
+        .learndash-wrapper .ld-item-list .ld-item-list-item a.ld-item-name:hover {
+            color: #2c3391 !important;
+        }
+        
+        /* Force dashboard layout over any grid systems */
+        .user-dashboard-container,
+        .user-dashboard-container .dashboard-content,
+        .user-dashboard-container .dashboard-columns {
+            display: block !important;
+        }
+        
+        .user-dashboard-container .dashboard-columns {
+            display: flex !important;
+        }
+        
+        /* Force clear any floats */
+        .course-access-status-wrapper:after,
+        .dashboard-main-section:after,
+        .dashboard-content:after {
+            content: "" !important;
+            display: table !important;
+            clear: both !important;
+        }
+        </style>
+        <script>
+            jQuery(document).ready(function($) {
+    // Check if we're on course 4236
+    if ($('body').hasClass('postid-4236') || $('body').find('[data-course-id="4236"]').length) {
+        // Find the button by its text content
+        $('a:contains("מבחני אמת")').each(function() {
+            // Update the href to the correct URL
+            $(this).attr('href', '/courses/%d7%a7%d7%95%d7%a8%d7%a1-%d7%9e%d7%a7%d7%95%d7%95%d7%9f-%d7%9c%d7%a8%d7%9b%d7%91-%d7%a4%d7%a8%d7%98%d7%99/quizzes/%d7%9e%d7%91%d7%97%d7%9f-%d7%90%d7%9e%d7%aa-%d7%9b%d7%9e%d7%95-%d7%91%d7%aa%d7%90%d7%95%d7%a8%d7%99%d7%94/');
+        });
+    }
+    
+    // Override alert function to replace text with empty string
+    window.originalAlert = window.alert;
+    window.alert = function(message) {
+        // Replace alert text with empty string
+        window.originalAlert('');
+    };
+});
+        </script>
         <?php
         return ob_get_clean();
     }

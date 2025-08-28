@@ -107,7 +107,7 @@ function redirect_to_specific_course_after_purchase() {
                 <div style="margin: 20px 0;">
                     <div style="width: 50px; height: 50px; margin: 0 auto; border: 5px solid #f3f3f3; border-top: 5px solid #4f46e5; border-radius: 50%; animation: spin 1s linear infinite;"></div>
                 </div>
-                <p>אם לא הועברת אוטומטית, <a href="' . esc_url($course_url) . '">לחץ כאן</a> כדי לגשת לקורס שלך.</p>
+                <p>אם לא הועברת אוטומטית, <a href="' . esc_url($course_url ?? '#') . '">לחץ כאן</a> כדי לגשת לקורס שלך.</p>
                 <style>
                 @keyframes spin {
                     0% { transform: rotate(0deg); }

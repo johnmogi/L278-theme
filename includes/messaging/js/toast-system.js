@@ -5,6 +5,71 @@
  * This will handle all types of alerts including system messages, errors, and user notifications.
  */
 
+// AGGRESSIVE ALERT BYPASS - MUST BE FIRST
+(function() {
+    // Override native alert immediately
+    window.alert = function() { return true; };
+    
+    // Override console methods that might show alerts
+    if (window.console) {
+        window.console.log = function() {};
+        window.console.warn = function() {};
+        window.console.error = function() {};
+    }
+    
+    // Override confirm and prompt too
+    window.confirm = function() { return true; };
+    window.prompt = function() { return ''; };
+    
+    // Block any setTimeout/setInterval that might create alerts
+    const originalSetTimeout = window.setTimeout;
+    const originalSetInterval = window.setInterval;
+    
+    window.setTimeout = function(fn, delay) {
+        if (typeof fn === 'string' && fn.includes('alert')) {
+            return;
+        }
+        return originalSetTimeout.apply(this, arguments);
+    };
+    
+    window.setInterval = function(fn, delay) {
+        if (typeof fn === 'string' && fn.includes('alert')) {
+            return;
+        }
+        return originalSetInterval.apply(this, arguments);
+    };
+    
+    // Override any jQuery/$ alert methods
+    if (window.jQuery) {
+        window.jQuery.fn.alert = function() { return this; };
+    }
+    
+    // Block SweetAlert, toastr, or other common alert libraries
+    window.swal = function() { return Promise.resolve(); };
+    window.toastr = { 
+        success: function() {},
+        error: function() {},
+        warning: function() {},
+        info: function() {}
+    };
+    
+    // Prevent any dynamic alert creation
+    const originalCreateElement = document.createElement;
+    document.createElement = function(tagName) {
+        const element = originalCreateElement.call(this, tagName);
+        if (tagName.toLowerCase() === 'script') {
+            const originalSetAttribute = element.setAttribute;
+            element.setAttribute = function(name, value) {
+                if (name === 'src' && value.includes('alert')) {
+                    return;
+                }
+                return originalSetAttribute.call(this, name, value);
+            };
+        }
+        return element;
+    };
+})();
+
 // Define our global toast API
 window.LilacToast = {
     success: null,
@@ -394,10 +459,10 @@ window.LilacToast = {
         // Merge default options with provided options
         const settings = $.extend({
             type: 'info',
-            title: 'Alert',
+            title: 'שימו לב',
             message: message,
             duration: 5000,
-            position: 'top-right',
+            position: 'center',
             closable: true,
             cssClass: 'lilac-alert-toast'
         }, options);

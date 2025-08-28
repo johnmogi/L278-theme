@@ -47,10 +47,17 @@
     transform: translateX(-50%);
 }
 
+/* Force all toasts to center */
+.lilac-toast-container {
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+}
+
 /* Toast Message Styling */
 .lilac-toast {
     position: relative;
-    margin-bottom: 10px;
+    margin: 0 auto 10px auto;
     padding: 15px;
     border-radius: 6px;
     background: #fff;
@@ -61,6 +68,7 @@
     pointer-events: auto; /* Make the toast clickable */
     direction: rtl; /* RTL support */
     overflow: hidden;
+    text-align: center;
 }
 
 .lilac-toast.show {
